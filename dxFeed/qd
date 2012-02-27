@@ -1,0 +1,73 @@
+#!/bin/bash
+# Performs QDS connect with server's JVM and QDS.
+
+cd $HOME
+#. etc/system.config
+ARR=("$@")
+
+replaceShortenedRecord () {
+	[ $1 == "t" ] && echo "Trade" && return
+	[ $1 == "tall" ] && echo "Trade[&]*" && return
+	[ `expr $1 : "t&"` -eq 2 ] && echo ${1/t&/Trade[&]} && return 
+	[ $1 == "q" ] && echo "Quote" && return
+	[ $1 == "qall" ] && echo "Quote[&]*" && return
+	[ `expr $1 : "q&"` -eq 2 ] && echo ${1/q&/Quote[&]} && return 
+	#[ `expr $1 : "Quote"` -eq 5 ] && echo $1 && return
+	[ $1 == "th" ] && echo "TradeHistory" && return
+	[ $1 == "s" ] && echo "Summary" && return
+	[ $1 == "tns" ] && echo "TimeAndSale" && return
+	[ $1 == "p" ] && echo "Profile" && return
+	[ $1 == "mm" ] && echo "MarketMaker" && return
+	[ $1 == "o" ] && echo "Order" && return
+	[ $1 == "f" ] && echo "Fundamental" && return
+}
+
+for (( i = 0; i < ${#ARR[@]}; i++ )); do
+	[ ${ARR[$i]} == "ticker" ] && ARR[$i]="-c ticker" && continue
+	[ ${ARR[$i]} == "stream" ] && ARR[$i]="-c stream" && continue
+	[ ${ARR[$i]} == "history" ] && ARR[$i]="-c history" && continue
+	#[ ${ARR[$i]} == "all" ] && ARR[$i]="-c all" && continue
+	[ ${ARR[$i]} == "all" ] && ARR[$i]="all" && continue
+	[ ${ARR[$i]} == "opra" ] && ARR[$i]="tiberius:7100" && continue
+	[ ${ARR[$i]} == "mdi" ] && ARR[$i]="caligula:7120" && continue
+	[ ${ARR[$i]} == "ctcq" ] && ARR[$i]="caligula:7130" && continue
+	[ ${ARR[$i]} == "gifo" ] && ARR[$i]="caligula:7135" && continue
+	[ ${ARR[$i]} == "gif" ] && ARR[$i]="caligula:7136" && continue
+	[ ${ARR[$i]} == "nasdaq" ] && ARR[$i]="caligula:7140" && continue
+	[ ${ARR[$i]} == "nl2" ] && ARR[$i]="caligula:7145" && continue
+	[ ${ARR[$i]} == "ice" ] && ARR[$i]="caligula:7150" && continue
+	[ ${ARR[$i]} == "vap" ] && ARR[$i]="caligula:7160" && continue
+	[ ${ARR[$i]} == "gids" ] && ARR[$i]="caligula:7170" && continue
+	[ ${ARR[$i]} == "otcbb" ] && ARR[$i]="caligula:7180" && continue
+	[ ${ARR[$i]} == "pink" ] && ARR[$i]="caligula:7185" && continue
+	[ ${ARR[$i]} == "cme" ] && ARR[$i]="nero:7190" && continue
+	[ ${ARR[$i]} == "cs" ] && ARR[$i]="mux-apitest:7400" && continue
+	[ ${ARR[$i]} == "msfx" ] && ARR[$i]="caligula:7225" && continue
+
+	#[ ${ARR[$i]} == "*" ] && ARR[$i]="*" && continue
+
+	if [[ ${ARR[$i]} == *,* ]]; then
+		#split
+		splitted=(${ARR[$i]//,/ })
+
+		#for each replace and join back
+		if [ -n "$(replaceShortenedRecord ${splitted[0]})" ]; then
+			ARR[$i]=$(replaceShortenedRecord ${splitted[0]})
+			for (( j = 1; j < ${#splitted[@]}; j++ )); do 
+				ARR[$i]=${ARR[$i]}","$(replaceShortenedRecord ${splitted[$j]})
+			done
+		else
+			ARR[$i]=$(tr "[a-z]" "[A-Z]" <<< "${ARR[$i]}")
+		fi
+	elif [ -n "$(replaceShortenedRecord ${ARR[$i]})" ]; then
+		#replace just one
+		ARR[$i]=$(replaceShortenedRecord ${ARR[$i]})
+	else
+		ARR[$i]=$(tr "[a-z]" "[A-Z]" <<< "${ARR[$i]}")
+	fi
+done
+
+echo "qds connect "${ARR[@]}
+
+$SERVER_JAVA_HOME/bin/java $SERVER_JAVA_VM -Dscheme=lib/toscommon.jar -Dcom.devexperts.tos.qdext.QuoteTimes -jar lib/qds-tools.jar connect ${ARR[*]}
+#$SERVER_JAVA_HOME/bin/java $SERVER_JAVA_VM -Dscheme=com.dxfeed.api.impl.DXFeedScheme -jar lib/qds-tools.jar connect ${ARR[*]}
