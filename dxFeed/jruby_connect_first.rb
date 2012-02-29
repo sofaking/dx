@@ -123,28 +123,34 @@ class Listener
     files.each do |file|
       case file.path
 	when /_tns$/
-	  @file_tns = file
+	  @tns_file = file
 	when /_t$/
-	  @file_t = file
+	  @t_file = file
 	when /_s$/
-	  @file_s = file
+	  @s_file = file
       end
     end
   end
 
   def eventsReceived(events)
+    @tns_arr, @t_arr, @s_arr = [], [], []
+
     events.each do |event|
       file = case event
 	when TimeAndSale
-	  @file_tns.puts event.to_row
+	  @tns_arr << event.to_row
 	  puts event.to_row unless event.isValidTick or event.isNew
 	when Trade
-	  @file_t.puts event.to_row
+	  @t_arr << event.to_row
 	when Summary
-	  @file_s.puts event.to_row
+	  @s_arr << event.to_row
       end
     end
-  end
+
+    @tns_file.puts @tns_arr
+    @t_file.puts @t_arr
+    @s_file.puts @s_arr
+end
 end
 
 feeds = {ctcq:   'caligula.mdd.lo:7130', 
