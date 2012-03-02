@@ -2,37 +2,54 @@ require 'qd-qds-3.102\lib\qds.jar'
 
 include Java
 
-import java.util.concurrent.Executors
 import java.util.Arrays
 
 import com.dxfeed.api.DXEndpoint
 import com.dxfeed.api.DXFeedSubscription
-import com.dxfeed.event.market.MarketEvent
+#import com.dxfeed.event.market.MarketEvent
 import com.dxfeed.event.market.TimeAndSale
 import com.dxfeed.event.market.Trade
 import com.dxfeed.event.market.Summary
 import com.dxfeed.api.DXFeedEventListener
 
-import java.text.Format
-import java.text.SimpleDateFormat
-import java.util.Date
+#import java.text.Format
+#import java.text.SimpleDateFormat
+#import java.util.Date
+#
+#class Time
+#  @@dateFormat = SimpleDateFormat.new "yyyy-MM-dd HH:mm:ss Z"
+#
+#  def self.now
+#    @@dateFormat.format Date.new
+#  end
+#
+#  def self.at timestamp
+#    @@dateFormat.format Date.new timestamp
+#  end
+#end
 
 class Time
-  @@dateFormat = SimpleDateFormat.new "yyyy-MM-dd HH:mm:ss Z"
+  class << Time
+    alias __at__ at
+    def at *args
+      if args.length == 2
+	__at__(*args).strftime("%m-%d %T.%L")
+      else
+	__at__(*args).strftime("%m-%d %T")
+      end
+    end
 
-  def self.now
-    @@dateFormat.format Date.new
-  end
-
-  def self.at timestamp
-    @@dateFormat.format Date.new timestamp
+    alias __now__ now
+    def now
+      __now__.strftime("%m-%d %T")
+    end
   end
 end
 
 class Trade
   def to_row
-    ["%25s"  % Time.now,
-     "%12s"  % getEventSymbol,
+    ["%13s"  % Time.now,
+     "%12s"  % getEventSymbol.sub(/&\w/, ''),
      "%25s"  % Time.at(getTime),
      "%4s"   % (getExchangeCode > 0 ? getExchangeCode.chr : '\0'),
      "%10s"  % getPrice,
@@ -44,8 +61,8 @@ end
 
 class Summary
   def to_row
-    ["%25s"  % Time.now,
-     "%12s"  % getEventSymbol,
+    ["%13s"  % Time.now,
+     "%12s"  % getEventSymbol.sub(/&\w/, ''),
      "%5s"   % getDayId,
      "%10s"  % getDayOpenPrice,
      "%10s"  % getDayHighPrice,
@@ -60,9 +77,13 @@ end
 
 class TimeAndSale
   def to_row
-    ["%25s"  % Time.now,
-     "%12s"  % getEventSymbol,
-     "%25s"  % Time.at(getTime),
+    timestamp = getTime.to_s
+    secs = timestamp[0..-4].to_i
+    msecs = timestamp[-3..-1].to_i
+
+    ["%13s"  % Time.now,
+     "%12s"  % getEventSymbol.sub(/&\w/, ''),
+     "%17s"  % Time.at(secs, msecs),
      "%8s"   % getSequence,
      "%4s"   % (getExchangeCode > 0 ? getExchangeCode.chr : '\0'),
      "%10s"  % getPrice,
@@ -75,8 +96,8 @@ end
 
 class File
   def print_title
-    case self.path
-      when /tns$/
+    case self.path[0..-5]
+      when /_tns$/, /summary/
 	print ["%25s"  % 'current time',
 	       "%12s"  % 'symbol',
 	       "%25s"  % 'event time',
@@ -88,7 +109,7 @@ class File
 	       "%7s"   % 'type'
 	      ].join(' '),
 	      "\n"
-      when /t$/
+      when /_t$/
 	print ["%25s"  % 'current time',
 	       "%12s"  % 'symbol',
 	       "%25s"  % 'event time',
@@ -98,7 +119,7 @@ class File
 	       "%10s"  % 'Volume'
 	      ].join(' '),
 	      "\n"
-      when /s$/
+      when /_s$/
 	print ["%25s"  % 'current time',
 	       "%12s"  % 'symbol',
 	       "%5s"   % 'DayId',
@@ -121,25 +142,30 @@ class Listener
   def initialize(*files)
     super
     files.each do |file|
-      case file.path
+      case file.path[0..-5]
 	when /_tns$/
 	  @tns_file = file
 	when /_t$/
 	  @t_file = file
 	when /_s$/
 	  @s_file = file
+	when /_all$/
+	  @all_file = file
       end
     end
   end
 
   def eventsReceived(events)
-    @tns_arr, @t_arr, @s_arr = [], [], []
+    @tns_arr, @t_arr, @s_arr, @all_arr = [], [], [], []
 
     events.each do |event|
       file = case event
 	when TimeAndSale
 	  @tns_arr << event.to_row
-	  puts event.to_row unless event.isValidTick or event.isNew
+	  unless event.isValidTick or event.isNew
+	    puts event.to_row 
+	    @all_arr << event.to_row
+	  end
 	when Trade
 	  @t_arr << event.to_row
 	when Summary
@@ -148,8 +174,9 @@ class Listener
     end
 
     @tns_file.puts @tns_arr
-    @t_file.puts @t_arr
-    @s_file.puts @s_arr
+    @t_file.puts   @t_arr
+    @s_file.puts   @s_arr
+    @all_file.puts @all_arr
 end
 end
 
@@ -167,6 +194,8 @@ symbols = {ctcq: %w[SPY BAC VXX TZA AZN TVIX CHK BP IWM GE],
 	   opra: %w[DJX UKX AUX BPX GYY BUB NZD EUU BUE IVF],
 	   ice: %w[/SBH2 /TFH2 /SBK2 /DXH2 /CCK2 /SBH2-/SBK2 /CCH2 /SBN2 /CCH2-/CCK2 /SBV2]}
 
+symbols[:otcbb].map!{ |e| [e + "&V", e + "&U"] }.flatten! # Convert comp symbols to regional symbols
+
 feeds.each_key do |feed|
   eval "@#{feed}_feed = DXEndpoint.create().connect(\"#{feeds[feed]}\").getFeed()"
   
@@ -177,13 +206,17 @@ feeds.each_key do |feed|
   eval "@#{feed}_sub = @#{feed}_feed.createSubscription *@#{feed}_sub"
 
   events.each_key do |suffix|
-    eval "@#{feed}_#{suffix} = File.open \"cancorrs_#{feed}_#{suffix}\", \"w\""
+    eval "@#{feed}_#{suffix} = File.open \"cancorrs_#{feed}_#{suffix}.txt\", \"w\""
     eval "@#{feed}_#{suffix}.print_title"
   end
 
+  @cancorrs_all_file = File.open 'cancorrs_all.txt', 'w'
+  @cancorrs_all_file.print_title
+
   eval "@#{feed}_sub.addEventListener Listener.new(@#{feed}_#{events.keys[0]},
 						  @#{feed}_#{events.keys[1]},
-						  @#{feed}_#{events.keys[2]})"
+						  @#{feed}_#{events.keys[2]},
+						  @cancorrs_all_file)"
 
   eval "@#{feed}_sub.addSymbols Arrays.asList(*#{symbols[feed]})"
 end
@@ -197,6 +230,7 @@ begin
 	eval "@#{feed}_#{suffix}.fsync"
       end
     end
+    @cancorrs_all_file.fsync
   end
 ensure
   feeds.each_key do |feed|
@@ -204,4 +238,5 @@ ensure
       eval "@#{feed}_#{suffix}.close"
     end
   end
+  @cancorrs_all_file.close
 end
