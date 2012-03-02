@@ -31,17 +31,17 @@ import com.dxfeed.api.DXFeedEventListener
 class Time
   class << Time
     alias __at__ at
-    def at *args
-      if args.length == 2
-	__at__(*args).strftime("%m-%d %T.%L")
-      else
-	__at__(*args).strftime("%m-%d %T")
-      end
+    def at timestamp
+      timestamp = timestamp.to_s
+      secs = timestamp[0..-4].to_i
+      msecs = timestamp[-3..-1].to_i
+
+      __at__(secs, msecs).strftime("%d-%m %T.%L")
     end
 
     alias __now__ now
     def now
-      __now__.strftime("%m-%d %T")
+      __now__.strftime("%d-%m %T")
     end
   end
 end
@@ -50,7 +50,7 @@ class Trade
   def to_row
     ["%13s"  % Time.now,
      "%12s"  % getEventSymbol.sub(/&\w/, ''),
-     "%25s"  % Time.at(getTime),
+     "%13s"  % Time.at(getTime),
      "%4s"   % (getExchangeCode > 0 ? getExchangeCode.chr : '\0'),
      "%10s"  % getPrice,
      "%10s"  % getSize,
@@ -62,7 +62,7 @@ end
 class Summary
   def to_row
     ["%13s"  % Time.now,
-     "%12s"  % getEventSymbol.sub(/&\w/, ''),
+     "%12s"  % getEventSymbol,
      "%5s"   % getDayId,
      "%10s"  % getDayOpenPrice,
      "%10s"  % getDayHighPrice,
@@ -77,13 +77,9 @@ end
 
 class TimeAndSale
   def to_row
-    timestamp = getTime.to_s
-    secs = timestamp[0..-4].to_i
-    msecs = timestamp[-3..-1].to_i
-
     ["%13s"  % Time.now,
      "%12s"  % getEventSymbol.sub(/&\w/, ''),
-     "%17s"  % Time.at(secs, msecs),
+     "%17s"  % Time.at(getTime),
      "%8s"   % getSequence,
      "%4s"   % (getExchangeCode > 0 ? getExchangeCode.chr : '\0'),
      "%10s"  % getPrice,
@@ -98,9 +94,9 @@ class File
   def print_title
     case self.path[0..-5]
       when /_tns$/, /summary/
-	print ["%25s"  % 'current time',
+	print ["%13s"  % 'current time',
 	       "%12s"  % 'symbol',
-	       "%25s"  % 'event time',
+	       "%17s"  % 'event time',
 	       "%8s"   % 'sequence',
 	       "%4s"   % 'exch',
 	       "%10s"  % 'price',
@@ -110,9 +106,9 @@ class File
 	      ].join(' '),
 	      "\n"
       when /_t$/
-	print ["%25s"  % 'current time',
+	print ["%13s"  % 'current time',
 	       "%12s"  % 'symbol',
-	       "%25s"  % 'event time',
+	       "%13s"  % 'event time',
 	       "%4s"   % 'exch',
 	       "%10s"  % 'price',
 	       "%10s"  % 'size',
@@ -120,7 +116,7 @@ class File
 	      ].join(' '),
 	      "\n"
       when /_s$/
-	print ["%25s"  % 'current time',
+	print ["%13s"  % 'current time',
 	       "%12s"  % 'symbol',
 	       "%5s"   % 'DayId',
 	       "%10s"  % 'Open',
@@ -153,31 +149,35 @@ class Listener
 	  @all_file = file
       end
     end
+
+    @@lock = Mutex.new
   end
 
   def eventsReceived(events)
-    @tns_arr, @t_arr, @s_arr, @all_arr = [], [], [], []
+    @@lock.synchronize do
+      @tns_arr, @t_arr, @s_arr, @all_arr = [], [], [], []
 
-    events.each do |event|
-      file = case event
-	when TimeAndSale
-	  @tns_arr << event.to_row
-	  unless event.isValidTick or event.isNew
-	    puts event.to_row 
-	    @all_arr << event.to_row
-	  end
-	when Trade
-	  @t_arr << event.to_row
-	when Summary
-	  @s_arr << event.to_row
+      events.each do |event|
+	file = case event
+	  when TimeAndSale
+	    @tns_arr << event.to_row
+	    unless event.isValidTick or event.isNew
+	      puts event.to_row 
+	      @all_arr << event.to_row
+	    end
+	  when Trade
+	    @t_arr << event.to_row
+	  when Summary
+	    @s_arr << event.to_row
+	end
       end
-    end
 
-    @tns_file.puts @tns_arr
-    @t_file.puts   @t_arr
-    @s_file.puts   @s_arr
-    @all_file.puts @all_arr
-end
+      @tns_file.puts @tns_arr
+      @t_file.puts   @t_arr
+      @s_file.puts   @s_arr
+      @all_file.puts @all_arr
+    end
+  end
 end
 
 feeds = {ctcq:   'caligula.mdd.lo:7130', 
@@ -194,7 +194,7 @@ symbols = {ctcq: %w[SPY BAC VXX TZA AZN TVIX CHK BP IWM GE],
 	   opra: %w[DJX UKX AUX BPX GYY BUB NZD EUU BUE IVF],
 	   ice: %w[/SBH2 /TFH2 /SBK2 /DXH2 /CCK2 /SBH2-/SBK2 /CCH2 /SBN2 /CCH2-/CCK2 /SBV2]}
 
-symbols[:otcbb].map!{ |e| [e + "&V", e + "&U"] }.flatten! # Convert comp symbols to regional symbols
+symbols[:otcbb].map!{ |e| [e, e + "&V", e + "&U"] }.flatten! # Convert comp symbols to regional symbols
 
 feeds.each_key do |feed|
   eval "@#{feed}_feed = DXEndpoint.create().connect(\"#{feeds[feed]}\").getFeed()"
