@@ -30,13 +30,15 @@ import com.dxfeed.api.DXFeedEventListener
 
 class Time
   class << Time
-    alias __at__ at
-    def at timestamp
+    def at_msec timestamp
       timestamp = timestamp.to_s
-      secs = timestamp[0..-4].to_i
-      msecs = timestamp[-3..-1].to_i
+      timestamp.insert -4, '.'
 
-      __at__(secs, msecs).strftime("%d-%m %T.%L")
+      at(timestamp.to_f).strftime("%d-%m %T.%L")
+    end
+
+    def at_sec timestamp
+      at(timestamp/1000).strftime("%d-%m %T")
     end
 
     alias __now__ now
@@ -48,20 +50,20 @@ end
 
 class Trade
   def to_row
-    ["%13s"  % Time.now,
+    ["%14s"  % Time.now,
      "%12s"  % getEventSymbol.sub(/&\w/, ''),
-     "%13s"  % Time.at(getTime),
+     "%14s"  % Time.at_sec(getTime),
      "%4s"   % (getExchangeCode > 0 ? getExchangeCode.chr : '\0'),
      "%10s"  % getPrice,
      "%10s"  % getSize,
      "%10s"  % getDayVolume
-    ].join(' ')
+    ].join('  ')
   end
 end
 
 class Summary
   def to_row
-    ["%13s"  % Time.now,
+    ["%14s"  % Time.now,
      "%12s"  % getEventSymbol,
      "%5s"   % getDayId,
      "%10s"  % getDayOpenPrice,
@@ -71,52 +73,52 @@ class Summary
      "%5s"   % getPrevDayId,
      "%10s"  % getPrevDayClosePrice,
      "%15s"  % getOpenInterest
-    ].join(' ')
+    ].join('  ')
   end
 end
 
 class TimeAndSale
   def to_row
-    ["%13s"  % Time.now,
+    ["%14s"  % Time.now,
      "%12s"  % getEventSymbol.sub(/&\w/, ''),
-     "%17s"  % Time.at(getTime),
+     "%18s"  % Time.at_msec(getTime),
      "%8s"   % getSequence,
      "%4s"   % (getExchangeCode > 0 ? getExchangeCode.chr : '\0'),
      "%10s"  % getPrice,
      "%10s"  % getSize,
      "'%5s'" % getExchangeSaleConditions,
      eval("if isCancel then \"%7s\" % 'Cancel' elsif isCorrection then \"%7s\" % 'Corr' elsif isValidTick then \"%7s\" % 'Valid' elsif isNew then \"%7s\" % 'New' else \"%7s\" % 'n/a' end")
-    ].join(' ')
+    ].join('  ')
   end
 end
 
 class File
   def print_title
     case self.path[0..-5]
-      when /_tns$/, /summary/
-	print ["%13s"  % 'current time',
+      when /_tns$/, /_all$/
+	print ["%14s"  % 'current time',
 	       "%12s"  % 'symbol',
-	       "%17s"  % 'event time',
+	       "%18s"  % 'event time',
 	       "%8s"   % 'sequence',
 	       "%4s"   % 'exch',
 	       "%10s"  % 'price',
 	       "%10s"  % 'size',
 	       "'%5s'" % 'cond',
 	       "%7s"   % 'type'
-	      ].join(' '),
+	      ].join('  '),
 	      "\n"
       when /_t$/
-	print ["%13s"  % 'current time',
+	print ["%14s"  % 'current time',
 	       "%12s"  % 'symbol',
-	       "%13s"  % 'event time',
+	       "%14s"  % 'event time',
 	       "%4s"   % 'exch',
 	       "%10s"  % 'price',
 	       "%10s"  % 'size',
 	       "%10s"  % 'Volume'
-	      ].join(' '),
+	      ].join('  '),
 	      "\n"
       when /_s$/
-	print ["%13s"  % 'current time',
+	print ["%14s"  % 'current time',
 	       "%12s"  % 'symbol',
 	       "%5s"   % 'DayId',
 	       "%10s"  % 'Open',
@@ -126,7 +128,7 @@ class File
 	       "%5s"   % 'PrevDayId',
 	       "%10s"  % 'PrevClose',
 	       "%15s"  % 'OpenInterest'
-	      ].join(' '),
+	      ].join('  '),
 	      "\n"
     end
   end
