@@ -15,6 +15,7 @@ replaceShortenedRecord () {
 	#[ `expr $1 : "Quote"` -eq 5 ] && echo $1 && return
 	[ $1 == "th" ] && echo "TradeHistory" && return
 	[ $1 == "s" ] && echo "Summary" && return
+	[ $1 == "sall" ] && echo "Summary[&]*" && return
 	[ $1 == "tns" ] && echo "TimeAndSale" && return
 	[ $1 == "p" ] && echo "Profile" && return
 	[ $1 == "mm" ] && echo "MarketMaker" && return
@@ -42,7 +43,7 @@ for (( i = 0; i < ${#ARR[@]}; i++ )); do
 	[ ${ARR[$i]} == "pink" ] && ARR[$i]="caligula:7185" && continue
 	[ ${ARR[$i]} == "cme" ] && ARR[$i]="nero:7190" && continue
 	[ ${ARR[$i]} == "cs" ] && ARR[$i]="mux-apitest:7400" && continue
-	[ ${ARR[$i]} == "msfx" ] && ARR[$i]="caligula:7225" && continue
+	[ ${ARR[$i]} == "msfx" ] && ARR[$i]="caligula:7110" && continue
 
 	#[ ${ARR[$i]} == "*" ] && ARR[$i]="*" && continue
 
